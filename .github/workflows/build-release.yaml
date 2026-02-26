@@ -39,6 +39,21 @@ jobs:
           cd $(go env GOROOT)
           for p in $GITHUB_WORKSPACE/.github/patch/*.patch; do patch --verbose -p 1 < "$p"; done
 
+      - name: Hack Shadowsocks Cipher
+        run: |
+          cd $GITHUB_WORKSPACE/core/src/foss/golang/clash
+          FILES=$(grep -rlE '^func Parse(Proxy|Shadowsocks)\(' . || true)
+          if [ -n "$FILES" ]; then
+            for f in $FILES; do
+              sed -i '/^func ParseProxy(/a \	if c, ok := mapping["cipher"].(string); ok { mapping["cipher"] = strings.ReplaceAll(c, "-ietf-", "-") }' "$f"
+              sed -i '/^func ParseShadowsocks(/a \	if c, ok := mapping["cipher"].(string); ok { mapping["cipher"] = strings.ReplaceAll(c, "-ietf-", "-") }' "$f"
+            done
+            go install golang.org/x/tools/cmd/goimports@latest
+            for f in $FILES; do
+              $(go env GOPATH)/bin/goimports -w "$f"
+            done
+          fi
+
       - uses: actions/cache@v4
         with:
           path: |
