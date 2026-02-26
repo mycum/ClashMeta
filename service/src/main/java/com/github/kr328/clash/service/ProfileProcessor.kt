@@ -217,7 +217,41 @@ object ProfileProcessor {
 
                 var cb = callback
 
-                Clash.fetchAndValid(context.processingDir, snapshot.source, true) {
+                // --- НАШ ЛОКАЛЬНЫЙ ПЕРЕХВАТЧИК ---
+                var fetchSource = snapshot.source
+                if (snapshot.type == Profile.Type.Url) {
+                    try {
+                        val client = OkHttpClient()
+                        val request = Request.Builder().url(snapshot.source).header("User-Agent", "Telegood").build()
+                        client.newCall(request).execute().use { response ->
+                            if (response.isSuccessful) {
+                                val bytes = response.body?.bytes() ?: ByteArray(0)
+                                val text = String(bytes)
+                                
+                                val decoded = try {
+                                    String(android.util.Base64.decode(text, android.util.Base64.DEFAULT))
+                                } catch (e: Exception) { text }
+                                
+                                val fixed = decoded.replace("-ietf-", "-")
+                                
+                                val finalBytes = if (decoded != text) {
+                                    android.util.Base64.encodeToString(fixed.toByteArray(), android.util.Base64.NO_WRAP).toByteArray()
+                                } else {
+                                    fixed.toByteArray()
+                                }
+                                
+                                val interceptFile = context.processingDir.resolve("intercepted.yaml")
+                                interceptFile.writeBytes(finalBytes)
+                                fetchSource = interceptFile.absolutePath
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w("Interceptor error: $e", e)
+                    }
+                }
+                // --- КОНЕЦ ПЕРЕХВАТЧИКА ---
+
+                Clash.fetchAndValid(context.processingDir, fetchSource, true) {
                     try {
                         cb?.updateStatus(it)
                     } catch (e: Exception) {
