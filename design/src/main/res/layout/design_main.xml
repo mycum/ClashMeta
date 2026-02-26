@@ -116,6 +116,7 @@
             android:alpha="0.15"
             android:background="?selectableItemBackgroundBorderless"
             android:clickable="true"
+            android:onClick="@{() -> self.request(Request.OpenProfiles)}"
             android:focusable="true"
             android:src="@drawable/ic_baseline_add" />
 
