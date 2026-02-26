@@ -88,6 +88,23 @@
                     app:subtext="@{clashRunning ? @string/format_traffic_forwarded(forwarded) : @string/tap_to_start}"
                     app:text="@{clashRunning ? @string/running : @string/stopped}" />
 
+                <com.github.kr328.clash.design.view.LargeActionLabel
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:onClick="@{() -> self.request(Request.OpenProxy)}"
+                    android:visibility="@{clashRunning ? View.VISIBLE : View.GONE}"
+                    android:layout_marginVertical="@dimen/main_label_margin_vertical"
+                    app:text="@string/proxy"
+                    app:icon="@drawable/ic_baseline_apps" />
+
+                <com.github.kr328.clash.design.view.LargeActionLabel
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:onClick="@{() -> self.request(Request.OpenLogs)}"
+                    android:layout_marginVertical="@dimen/main_label_margin_vertical"
+                    app:text="@string/logs"
+                    app:icon="@drawable/ic_baseline_assignment" />
+
             </LinearLayout>
         </ScrollView>
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
