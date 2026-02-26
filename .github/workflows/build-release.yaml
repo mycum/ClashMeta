@@ -113,7 +113,5 @@ jobs:
         if: ${{ success() }}
         with:
           tag_name: ${{ inputs.release-tag }}
-          files: ${{ steps.sign_app.outputs.signedFile }}
+          files: app/build/outputs/apk/meta/release/*.apk
           generate_release_notes: true
-
-      
