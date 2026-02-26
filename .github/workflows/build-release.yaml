@@ -32,7 +32,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.26"
-          check-latest: true # Always check for the latest patch release
+          check-latest: true
 
       - name: Apply Patches
         run: |
@@ -52,14 +52,13 @@ jobs:
         id: process-version
         run: |
           VERSION_TAG=${{ inputs.release-tag }}
-          VERSION_TAG=${VERSION_TAG#v}                              # remove the 'v' prefix
-          IFS='.' read -ra VERSION_PARTS <<< "$VERSION_TAG"         # split into array
+          VERSION_TAG=${VERSION_TAG#v}
+          IFS='.' read -ra VERSION_PARTS <<< "$VERSION_TAG"
           VERSION_CODE=$(printf "%1d%02d%03d" "${VERSION_PARTS[0]}" "${VERSION_PARTS[1]}" "${VERSION_PARTS[2]}")
           
-          echo "versonName=$VERSION_TAG" >> $GITHUB_OUTPUT          # "1.2.3"
-          echo "versonCode=$VERSION_CODE" >> $GITHUB_OUTPUT         # "102003"
+          echo "versonName=$VERSION_TAG" >> $GITHUB_OUTPUT
+          echo "versonCode=$VERSION_CODE" >> $GITHUB_OUTPUT
       
-      # Re-write version in build.gradle.kts
       - name: Re-write version
         uses: Devofure/advance-android-version-actions@v1.5
         with:
@@ -67,7 +66,6 @@ jobs:
           versionCode: ${{ steps.process-version.outputs.versonCode }}
           versionName: ${{ steps.process-version.outputs.versonName }}
       
-      # If any change found, commit it and push
       - name: Commit and push if changes
         run: |
           changes=$(git diff --name-only origin/main | wc -l)
@@ -89,23 +87,19 @@ jobs:
           sudo update-ca-certificates
           cp -f /etc/ssl/certs/ca-certificates.crt core/src/foss/golang/clash/component/ca/ca-certificates.crt
 
-      - name: Signing properties
-        env:
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          touch signing.properties
-          echo keystore.password="$SIGNING_STORE_PASSWORD" > signing.properties
-          echo key.alias="$SIGNING_KEY_ALIAS" >> signing.properties
-          echo key.password="$SIGNING_KEY_PASSWORD" >> signing.properties
-            
-          echo "cat signing.properties"
-          cat signing.properties
-
       - name: Release Build
         if: success()
         run: ./gradlew --no-daemon app:assembleMetaRelease
+
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: app/build/outputs/apk/meta/release
+          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
 
       - name: Tag Repo
         uses: richardsimko/update-tag@v1
@@ -119,7 +113,7 @@ jobs:
         if: ${{ success() }}
         with:
           tag_name: ${{ inputs.release-tag }}
-          files: app/build/outputs/apk/meta/release/*
+          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
           generate_release_notes: true
 
       - name: Release Changelog Builder
@@ -129,5 +123,5 @@ jobs:
             {
               "ignore_labels": [
                 "Update"
-              ],
+              ]
             }
