@@ -51,6 +51,15 @@ class MainActivity : BaseActivity<MainDesign>() {
                             else
                                 design.startClash()
                         }
+                        MainDesign.Request.OpenProxy ->
+                            startActivity(ProxyActivity::class.intent)
+                        MainDesign.Request.OpenLogs -> {
+                            if (LogcatService.running) {
+                                startActivity(LogcatActivity::class.intent)
+                            } else {
+                                startActivity(LogsActivity::class.intent)
+                            }
+                        }
                     }
                 }
                 if (clashRunning) {
