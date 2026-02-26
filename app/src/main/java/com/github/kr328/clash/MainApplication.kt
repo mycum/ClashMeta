@@ -8,12 +8,13 @@ import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.remote.Remote
 import com.github.kr328.clash.service.util.sendServiceRecreated
 import com.github.kr328.clash.util.clashDir
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.net.ServerSocket
 import java.net.URL
 import kotlin.concurrent.thread
-import java.util.UUID
 
 @Suppress("unused")
 class MainApplication : Application() {
@@ -43,96 +44,85 @@ class MainApplication : Application() {
         val prefs = getSharedPreferences("auto_setup", Context.MODE_PRIVATE)
         if (prefs.getBoolean("setup_done", false)) return
 
-        try {
-            val profilesDir = File(filesDir, "profiles")
-            val pendingDir = File(filesDir, "pending")
-            profilesDir.mkdirs()
-            pendingDir.mkdirs()
+        Global.launch(Dispatchers.IO) {
+            try {
+                // Настраиваем туннелирование (только Telegram)
+                val serviceStore = com.github.kr328.clash.service.store.ServiceStore(this@MainApplication)
+                serviceStore.accessControlMode = com.github.kr328.clash.service.model.AccessControlMode.AcceptSelected
+                serviceStore.accessControlPackages = setOf("org.telegram.messenger", "org.telegram.messenger.web")
 
-            // Наш идеальный минималистичный конфиг
-            val defaultConfig = """
-                mixed-port: 7890
-                allow-lan: false
-                mode: rule
-                log-level: warning
-                ipv6: false
+                // Наш идеальный минималистичный конфиг
+                val defaultConfig = """
+                    mixed-port: 7890
+                    allow-lan: false
+                    mode: rule
+                    log-level: warning
+                    ipv6: false
 
-                dns:
-                  enable: true
-                  ipv6: false
-                  enhanced-mode: fake-ip
-                  nameserver:
-                    - https://8.8.8.8/dns-query
-                    - https://1.1.1.1/dns-query
-                  fallback:
-                    - https://dns.cloudflare.com/dns-query
-                    - https://dns.google/dns-query
-
-                proxy-providers:
-                  rus_servers:
-                    type: http
-                    url: "http://127.0.0.1:9090/sub"
-                    interval: 86400
-                    path: ./providers/rus.yaml
-                    health-check:
+                    dns:
                       enable: true
-                      interval: 600
-                      url: "http://cp.cloudflare.com/generate_204"
+                      ipv6: false
+                      enhanced-mode: fake-ip
+                      nameserver:
+                        - https://8.8.8.8/dns-query
+                        - https://1.1.1.1/dns-query
+                      fallback:
+                        - https://dns.cloudflare.com/dns-query
+                        - https://dns.google/dns-query
 
-                proxy-groups:
-                  - name: auto
-                    type: url-test
-                    use:
-                      - rus_servers
-                    url: "http://cp.cloudflare.com/generate_204"
-                    interval: 300
-                    tolerance: 50
+                    proxy-providers:
+                      rus_servers:
+                        type: http
+                        url: "http://127.0.0.1:9090/sub"
+                        interval: 86400
+                        path: ./providers/rus.yaml
+                        health-check:
+                          enable: true
+                          interval: 600
+                          url: "http://cp.cloudflare.com/generate_204"
 
-                rules:
-                  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
-                  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
-                  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
-                  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
-                  - DOMAIN-SUFFIX,localhost,DIRECT
-                  - MATCH, auto
-            """.trimIndent()
+                    proxy-groups:
+                      - name: auto
+                        type: url-test
+                        use:
+                          - rus_servers
+                        url: "http://cp.cloudflare.com/generate_204"
+                        interval: 300
+                        tolerance: 50
 
-            val uuid = UUID.randomUUID().toString()
-            val configFile = File(profilesDir, "$uuid.yaml")
-            configFile.writeText(defaultConfig)
+                    rules:
+                      - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+                      - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+                      - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+                      - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+                      - DOMAIN-SUFFIX,localhost,DIRECT
+                      - MATCH, auto
+                """.trimIndent()
 
-            // Настраиваем базу данных
-            val db = com.github.kr328.clash.service.data.Database.invoke(this)
-            
-            // Включаем раздельное туннелирование (только Telegram)
-            val serviceStore = com.github.kr328.clash.service.store.ServiceStore(this)
-            serviceStore.accessControlMode = com.github.kr328.clash.service.model.AccessControlMode.Accept
-            serviceStore.accessControlPackages = setOf("org.telegram.messenger", "org.telegram.messenger.web")
+                // Используем родной менеджер профилей
+                val profileManager = com.github.kr328.clash.service.ProfileManager(this@MainApplication)
+                val uuid = profileManager.create(
+                    com.github.kr328.clash.service.model.Profile.Type.File,
+                    "Telegram Auto",
+                    ""
+                )
+                
+                // Подкладываем файл в папку, которую он только что создал
+                val pendingDir = java.io.File(filesDir, "pending")
+                val configFile = java.io.File(pendingDir, "${uuid}/config.yaml")
+                configFile.writeText(defaultConfig)
+                
+                // Фиксируем изменения и делаем профиль активным
+                profileManager.commit(uuid, null)
+                val profile = profileManager.queryByUUID(uuid)
+                if (profile != null) {
+                    profileManager.setActive(profile)
+                }
 
-            // Добавляем профиль в базу
-            val profile = com.github.kr328.clash.service.model.Profile(
-                uuid = uuid,
-                name = "Telegram Auto",
-                type = com.github.kr328.clash.service.model.Profile.Type.File,
-                source = "",
-                interval = 0,
-                pending = false,
-                imported = true,
-                createdAt = System.currentTimeMillis()
-            )
-            
-            db.profileDao().insert(profile)
-            
-            // Делаем его активным
-            val selection = com.github.kr328.clash.service.data.Selection(
-                id = 0,
-                selected = uuid
-            )
-            db.selectionDao().setSelected(selection)
-
-            prefs.edit().putBoolean("setup_done", true).apply()
-        } catch (e: Exception) {
-            Log.e("Failed to setup default profile", e)
+                prefs.edit().putBoolean("setup_done", true).apply()
+            } catch (e: Exception) {
+                Log.e("Failed to setup default profile", e)
+            }
         }
     }
 
@@ -149,7 +139,6 @@ class MainApplication : Application() {
                             val requestLine = reader.readLine()
                             if (requestLine != null && requestLine.startsWith("GET /sub")) {
                                 Log.i("Intercepting subscription request")
-                                // Скачиваем оригинальную подписку
                                 val rawSub = URL("https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_SS%2BAll_RUS.txt").readText()
                                 // ДЕЛАЕМ ЗАМЕНУ ШИФРА
                                 val fixedSub = rawSub.replace("chacha20-poly1305", "chacha20-ietf-poly1305")
