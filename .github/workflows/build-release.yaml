@@ -92,16 +92,29 @@ jobs:
         run: ./gradlew --no-daemon app:assembleMetaRelease
 
       - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
+        uses: ilharp/sign-android-release@v1
         id: sign_app
         with:
-          releaseDirectory: app/build/outputs/apk/meta/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
+          releaseDir: app/build/outputs/apk/meta/release
+          signingKey: ${{ secrets.KEYSTORE_BASE64 }}
+          keyAlias: ${{ secrets.KEY_ALIAS }}
           keyStorePassword: ${{ secrets.STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
-          env:
-          BUILD_TOOLS_VERSION: "34.0.0"
+
+      - name: Tag Repo
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: ${{ inputs.release-tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        if: ${{ success() }}
+        with:
+          tag_name: ${{ inputs.release-tag }}
+          files: ${{ steps.sign_app.outputs.signedFile }}
+          generate_release_notes: true
 
       - name: Tag Repo
         uses: richardsimko/update-tag@v1
