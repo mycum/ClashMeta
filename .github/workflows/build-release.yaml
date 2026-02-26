@@ -92,7 +92,7 @@ jobs:
         run: ./gradlew --no-daemon app:assembleMetaRelease
 
       - name: Sign APK
-        uses: ilharp/sign-android-release@v1
+        uses: ilharp/sign-android-release@v2
         id: sign_app
         with:
           releaseDir: app/build/outputs/apk/meta/release
@@ -114,21 +114,6 @@ jobs:
         with:
           tag_name: ${{ inputs.release-tag }}
           files: ${{ steps.sign_app.outputs.signedFile }}
-          generate_release_notes: true
-
-      - name: Tag Repo
-        uses: richardsimko/update-tag@v1
-        with:
-          tag_name: ${{ inputs.release-tag }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Release
-        uses: softprops/action-gh-release@v1
-        if: ${{ success() }}
-        with:
-          tag_name: ${{ inputs.release-tag }}
-          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
           generate_release_notes: true
 
       - name: Release Changelog Builder
