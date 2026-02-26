@@ -61,7 +61,7 @@ class MainActivity : BaseActivity<MainDesign>() {
                             }
                         }
                         MainDesign.Request.OpenProfiles ->
-                            startActivity(ProfilesActivity::class.intent)
+                            startActivity(AccessControlActivity::class.intent)
                     }
                 }
                 if (clashRunning) {
