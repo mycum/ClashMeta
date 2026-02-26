@@ -132,7 +132,7 @@ class MainApplication : Application() {
             try {
                 content = String(Base64.decode(content, Base64.DEFAULT))
             } catch (e: Exception) {
-                Log.e("Base64", "Failed to decode main sub", e)
+                Log.e("Failed to decode main sub", e)
             }
         }
         
