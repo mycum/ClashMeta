@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	P "path"
 	"runtime"
+	"strings"
 	"time"
 
 	"cfa/native/app"
@@ -60,6 +62,21 @@ func fetch(url *U.URL, file string) error {
 
 	defer reader.Close()
 
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+
+	text := string(body)
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text))
+	if err == nil && len(decoded) > 0 {
+		fixed := strings.ReplaceAll(string(decoded), "-ietf-", "-")
+		body = []byte(base64.StdEncoding.EncodeToString([]byte(fixed)))
+	} else {
+		fixed := strings.ReplaceAll(text, "-ietf-", "-")
+		body = []byte(fixed)
+	}
+
 	_ = os.MkdirAll(P.Dir(file), 0700)
 
 	f, err := os.OpenFile(file, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
@@ -69,7 +86,7 @@ func fetch(url *U.URL, file string) error {
 
 	defer f.Close()
 
-	_, err = io.Copy(f, reader)
+	_, err = f.Write(body)
 	if err != nil {
 		_ = os.Remove(file)
 	}
