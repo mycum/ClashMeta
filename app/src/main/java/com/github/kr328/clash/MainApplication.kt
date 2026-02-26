@@ -2,6 +2,7 @@ package com.github.kr328.clash
 
 import android.app.Application
 import android.content.Context
+import android.util.Base64
 import com.github.kr328.clash.common.Global
 import com.github.kr328.clash.common.compat.currentProcessName
 import com.github.kr328.clash.common.log.Log
@@ -107,12 +108,10 @@ class MainApplication : Application() {
                     ""
                 )
                 
-                // Подкладываем файл в папку, которую он только что создал
                 val pendingDir = java.io.File(filesDir, "pending")
                 val configFile = java.io.File(pendingDir, "${uuid}/config.yaml")
                 configFile.writeText(defaultConfig)
                 
-                // Фиксируем изменения и делаем профиль активным
                 profileManager.commit(uuid, null)
                 val profile = profileManager.queryByUUID(uuid)
                 if (profile != null) {
@@ -124,6 +123,55 @@ class MainApplication : Application() {
                 Log.e("Failed to setup default profile", e)
             }
         }
+    }
+
+    private fun fixShadowsocksSub(raw: String): String {
+        var content = raw.trim()
+        // Если файл зашифрован целиком, расшифровываем
+        if (!content.contains("ss://") && !content.contains("vmess://") && !content.contains("vless://")) {
+            try {
+                content = String(Base64.decode(content, Base64.DEFAULT))
+            } catch (e: Exception) {
+                Log.e("Base64", "Failed to decode main sub", e)
+            }
+        }
+        
+        val fixedLines = content.lines().map { line ->
+            val trimLine = line.trim()
+            if (trimLine.startsWith("ss://")) {
+                try {
+                    val urlPart = trimLine.substring(5).substringBefore("#")
+                    val namePart = if (trimLine.contains("#")) "#" + trimLine.substringAfter("#") else ""
+                    
+                    var decodedUserPart = ""
+                    var restPart = ""
+                    
+                    if (urlPart.contains("@")) {
+                        val user = urlPart.substringBefore("@")
+                        restPart = "@" + urlPart.substringAfter("@")
+                        decodedUserPart = try {
+                            String(Base64.decode(user, Base64.DEFAULT))
+                        } catch(e: Exception) { user }
+                    } else {
+                        decodedUserPart = try {
+                            String(Base64.decode(urlPart, Base64.DEFAULT))
+                        } catch(e: Exception) { urlPart }
+                    }
+                    
+                    val fixedDecoded = decodedUserPart.replace("chacha20-poly1305", "chacha20-ietf-poly1305")
+                    val reEncoded = Base64.encodeToString(fixedDecoded.toByteArray(), Base64.NO_WRAP)
+                    
+                    "ss://" + reEncoded + restPart + namePart
+                } catch(e: Exception) {
+                    trimLine
+                }
+            } else {
+                trimLine
+            }
+        }
+        
+        // Отдаем ядру обратно в родном формате Base64
+        return Base64.encodeToString(fixedLines.joinToString("\n").toByteArray(), Base64.NO_WRAP)
     }
 
     private fun startLocalInterceptor() {
@@ -140,8 +188,8 @@ class MainApplication : Application() {
                             if (requestLine != null && requestLine.startsWith("GET /sub")) {
                                 Log.i("Intercepting subscription request")
                                 val rawSub = URL("https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_SS%2BAll_RUS.txt").readText()
-                                // ДЕЛАЕМ ЗАМЕНУ ШИФРА
-                                val fixedSub = rawSub.replace("chacha20-poly1305", "chacha20-ietf-poly1305")
+                                
+                                val fixedSub = fixShadowsocksSub(rawSub)
                                 
                                 val response = "HTTP/1.1 200 OK\r\n" +
                                         "Content-Type: text/plain; charset=utf-8\r\n" +
