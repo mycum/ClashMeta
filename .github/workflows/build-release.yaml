@@ -100,6 +100,8 @@ jobs:
           alias: ${{ secrets.KEY_ALIAS }}
           keyStorePassword: ${{ secrets.STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
+          env:
+          BUILD_TOOLS_VERSION: "34.0.0"
 
       - name: Tag Repo
         uses: richardsimko/update-tag@v1
